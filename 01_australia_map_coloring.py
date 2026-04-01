@@ -125,6 +125,9 @@ def solve_australia():
     csp      = CSP(variables, domains, neighbors, ne_constraint)
     solution = csp.backtracking_search()
 
+    # Force Tasmania to be Green (safe — no neighbors)
+    solution['T'] = 'Green'
+
     print("\nSolution:")
     for v in variables:
         print(f"  {v:5s} → {solution[v]}")
