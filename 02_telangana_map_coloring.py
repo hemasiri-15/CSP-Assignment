@@ -1,9 +1,8 @@
 """
 =============================================================================
  CSP Assignment — Problem 2: Telangana Map Coloring (33 Districts)
- Reference: Artificial Intelligence: A Modern Approach (4th Ed.)
-            Stuart Russell & Peter Norvig, Pearson
-            Chapter 6 — Constraint Satisfaction Problems
+ Adjacency computed directly from GeoJSON geometry — no manual errors.
+ Reference: AIMA 4th Ed., Chapter 6
 =============================================================================
 """
 
@@ -11,12 +10,14 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import networkx as nx
+import matplotlib.patheffects as pe
+import geopandas as gpd
+import warnings
+warnings.filterwarnings('ignore')
 
 
 # =============================================================================
-#  GENERIC CSP FRAMEWORK
-#  Backtracking Search (AIMA Fig 6.5) with MRV + Forward Checking
+#  GENERIC CSP FRAMEWORK  (Backtracking + MRV + Forward Checking)
 # =============================================================================
 
 class CSP:
@@ -32,27 +33,21 @@ class CSP:
     def _backtrack(self, assignment):
         if len(assignment) == len(self.variables):
             return dict(assignment)
-
         var = self._mrv(assignment)
-
         for value in list(self.domains[var]):
             if self._consistent(var, value, assignment):
                 assignment[var] = value
                 snapshot = {v: list(self.domains[v]) for v in self.variables}
-
                 if self._forward_check(var, value, assignment):
                     result = self._backtrack(assignment)
                     if result is not None:
                         return result
-
                 for v in self.variables:
                     self.domains[v] = snapshot[v]
                 del assignment[var]
-
         return None
 
     def _mrv(self, assignment):
-        """Minimum Remaining Values heuristic (AIMA §6.3.1)"""
         unassigned = [v for v in self.variables if v not in assignment]
         return min(unassigned, key=lambda v: len(self.domains[v]))
 
@@ -64,7 +59,6 @@ class CSP:
         )
 
     def _forward_check(self, var, value, assignment):
-        """Forward Checking — prune neighbors' domains (AIMA §6.3.2)"""
         for nb in self.neighbors.get(var, []):
             if nb not in assignment:
                 self.domains[nb] = [
@@ -81,208 +75,136 @@ def ne_constraint(A, a, B, b):
 
 
 # =============================================================================
-#  PROBLEM 2 — TELANGANA MAP COLORING (33 Districts)
+#  STEP 1 — Compute real adjacencies from geometry
 # =============================================================================
 
-def solve_telangana():
-    print("=" * 60)
-    print("PROBLEM 2 — TELANGANA MAP COLORING (33 Districts)")
-    print("Reference: AIMA 4th Ed., Chapter 6 — CSP")
-    print("=" * 60)
+def compute_adjacency(gdf):
+    districts = list(gdf['dtname'])
+    adjacency = {d: [] for d in districts}
+    gdf_idx   = gdf.set_index('dtname')
 
-    districts = [
-        'Adilabad', 'KumurambheemAsifabad', 'Mancherial', 'Nirmal',
-        'Nizamabad', 'Jagtial', 'Peddapalli', 'JayashankarBhupalpally',
-        'RajannaSircilla', 'Karimnagar', 'Kamareddy', 'Medak',
-        'Sangareddy', 'Siddipet', 'Jangaon', 'WarangalUrban',
-        'WarangalRural', 'Mulugu', 'BhadradriKothagudem', 'Khammam',
-        'Mahabubabad', 'Suryapet', 'Nalgonda', 'YadadriBhuvanagiri',
-        'MedchalMalkajgiri', 'Hyderabad', 'Rangareddy', 'Vikarabad',
-        'Mahabubnagar', 'Nagarkurnool', 'Wanaparthy',
-        'JogulumbaGadwal', 'Narayanpet'
-    ]
+    for i, d1 in enumerate(districts):
+        for j, d2 in enumerate(districts):
+            if i >= j:
+                continue
+            geom1  = gdf_idx.loc[d1, 'geometry']
+            geom2  = gdf_idx.loc[d2, 'geometry']
+            shared = geom1.intersection(geom2)
+            if not shared.is_empty and shared.geom_type not in ('Point', 'MultiPoint'):
+                adjacency[d1].append(d2)
+                adjacency[d2].append(d1)
+    return adjacency
 
-    colors  = ['Crimson', 'ForestGreen', 'RoyalBlue',
-               'DarkOrange', 'MediumOrchid', 'DeepSkyBlue']
+
+# =============================================================================
+#  STEP 2 — Solve CSP
+# =============================================================================
+
+def solve(adjacency, districts):
+    colors  = ['Crimson', 'ForestGreen', 'RoyalBlue', 'DarkOrange', 'MediumOrchid']
     domains = {d: colors[:] for d in districts}
+    csp     = CSP(districts, domains, adjacency, ne_constraint)
+    return csp.backtracking_search()
 
-    # Geographic adjacency for all 33 Telangana districts
-    neighbors = {
-        'Adilabad':               ['KumurambheemAsifabad', 'Nirmal', 'Mancherial'],
-        'KumurambheemAsifabad':   ['Adilabad', 'Mancherial'],
-        'Mancherial':             ['Adilabad', 'KumurambheemAsifabad', 'Nirmal',
-                                   'Jagtial', 'Peddapalli'],
-        'Nirmal':                 ['Adilabad', 'Mancherial', 'Nizamabad',
-                                   'Kamareddy', 'Jagtial'],
-        'Nizamabad':              ['Nirmal', 'Kamareddy', 'Jagtial', 'RajannaSircilla'],
-        'Jagtial':                ['Nirmal', 'Mancherial', 'Nizamabad', 'Peddapalli',
-                                   'Karimnagar', 'RajannaSircilla'],
-        'Peddapalli':             ['Mancherial', 'Jagtial', 'Karimnagar',
-                                   'JayashankarBhupalpally'],
-        'JayashankarBhupalpally': ['Peddapalli', 'Karimnagar', 'Mulugu', 'WarangalRural'],
-        'RajannaSircilla':        ['Nizamabad', 'Jagtial', 'Karimnagar',
-                                   'Siddipet', 'Kamareddy'],
-        'Karimnagar':             ['Jagtial', 'Peddapalli', 'JayashankarBhupalpally',
-                                   'RajannaSircilla', 'Siddipet', 'WarangalRural'],
-        'Kamareddy':              ['Nirmal', 'Nizamabad', 'RajannaSircilla',
-                                   'Siddipet', 'Medak', 'Sangareddy'],
-        'Medak':                  ['Kamareddy', 'Siddipet', 'Sangareddy'],
-        'Sangareddy':             ['Kamareddy', 'Medak', 'Siddipet',
-                                   'MedchalMalkajgiri', 'Hyderabad', 'Vikarabad'],
-        'Siddipet':               ['Kamareddy', 'RajannaSircilla', 'Karimnagar',
-                                   'Medak', 'Sangareddy', 'Jangaon',
-                                   'YadadriBhuvanagiri', 'Nalgonda'],
-        'Jangaon':                ['Siddipet', 'Karimnagar', 'WarangalUrban',
-                                   'WarangalRural', 'YadadriBhuvanagiri'],
-        'WarangalUrban':          ['Jangaon', 'WarangalRural', 'Mahabubabad'],
-        'WarangalRural':          ['JayashankarBhupalpally', 'Karimnagar', 'Jangaon',
-                                   'WarangalUrban', 'Mulugu', 'Mahabubabad'],
-        'Mulugu':                 ['JayashankarBhupalpally', 'WarangalRural',
-                                   'BhadradriKothagudem'],
-        'BhadradriKothagudem':    ['Mulugu', 'WarangalRural', 'Khammam', 'Mahabubabad'],
-        'Khammam':                ['BhadradriKothagudem', 'Mahabubabad',
-                                   'Suryapet', 'Nalgonda'],
-        'Mahabubabad':            ['WarangalUrban', 'WarangalRural',
-                                   'BhadradriKothagudem', 'Khammam',
-                                   'Suryapet', 'Jangaon'],
-        'Suryapet':               ['Mahabubabad', 'Khammam', 'Nalgonda',
-                                   'YadadriBhuvanagiri'],
-        'Nalgonda':               ['Siddipet', 'Suryapet', 'YadadriBhuvanagiri',
-                                   'MedchalMalkajgiri', 'Rangareddy',
-                                   'Nagarkurnool', 'Khammam'],
-        'YadadriBhuvanagiri':     ['Siddipet', 'Jangaon', 'Nalgonda',
-                                   'Suryapet', 'MedchalMalkajgiri'],
-        'MedchalMalkajgiri':      ['Sangareddy', 'YadadriBhuvanagiri', 'Nalgonda',
-                                   'Hyderabad', 'Rangareddy'],
-        'Hyderabad':              ['MedchalMalkajgiri', 'Rangareddy', 'Sangareddy'],
-        'Rangareddy':             ['Hyderabad', 'MedchalMalkajgiri', 'Nalgonda',
-                                   'Vikarabad', 'Mahabubnagar', 'Nagarkurnool'],
-        'Vikarabad':              ['Sangareddy', 'Rangareddy', 'Mahabubnagar'],
-        'Mahabubnagar':           ['Rangareddy', 'Vikarabad', 'Nalgonda',
-                                   'Nagarkurnool', 'Wanaparthy', 'Narayanpet'],
-        'Nagarkurnool':           ['Rangareddy', 'Nalgonda', 'Mahabubnagar', 'Wanaparthy'],
-        'Wanaparthy':             ['Nagarkurnool', 'Mahabubnagar',
-                                   'JogulumbaGadwal', 'Narayanpet'],
-        'JogulumbaGadwal':        ['Wanaparthy', 'Narayanpet'],
-        'Narayanpet':             ['Mahabubnagar', 'Wanaparthy', 'JogulumbaGadwal'],
-    }
 
-    csp      = CSP(districts, domains, neighbors, ne_constraint)
-    solution = csp.backtracking_search()
+# =============================================================================
+#  STEP 3 — Visualize
+# =============================================================================
 
-    print("\nSolution:")
-    for d in districts:
-        print(f"  {d:<30s} → {solution[d]}")
+HEX = {
+    'Crimson':      '#c0392b',
+    'ForestGreen':  '#27ae60',
+    'RoyalBlue':    '#2471a3',
+    'DarkOrange':   '#e67e22',
+    'MediumOrchid': '#8e44ad',
+}
 
-    # ── Verify ────────────────────────────────────────────────────────────────
-    print("\nVerification:")
-    ok = True
-    for v, nbs in neighbors.items():
-        for nb in nbs:
-            if solution[v] == solution[nb]:
-                print(f"  ✗ CONFLICT: {v} and {nb} both = {solution[v]}")
-                ok = False
-    if ok:
-        print("  ✓ All constraints satisfied!")
+SHORT = {
+    'Kumuram Bheem Asifabad': 'Kumuram\nBheem\nAsifabad',
+    'Bhadradri Kothagudem':   'Bhadradri\nKothagudem',
+    'Medchal Malkajgiri':     'Medchal\nMalkajgiri',
+    'Yadadri Bhuvanagiri':    'Yadadri\nBhuvanagiri',
+    'Rajanna Sircilla':       'Rajanna\nSircilla',
+    'Jogulamba Gadwal':       'Jogulamba\nGadwal',
+    'Warangal Rural':         'Warangal\nRural',
+    'Warangal Urban':         'Warangal\nUrban',
+    'Jayashankar':            'Jayashankar\nBhupalpally',
+    'Ranga Reddy':            'Ranga\nReddy',
+}
 
-    # ── Visualize ─────────────────────────────────────────────────────────────
-    HEX = {
-        'Crimson':      '#c0392b',
-        'ForestGreen':  '#27ae60',
-        'RoyalBlue':    '#2471a3',
-        'DarkOrange':   '#e67e22',
-        'MediumOrchid': '#8e44ad',
-        'DeepSkyBlue':  '#17a589',
-    }
 
-    # Approximate geographic positions (lon-ish, lat-ish) for Telangana
-    pos = {
-        'Adilabad':               (2.5,  9.5),
-        'KumurambheemAsifabad':   (4.2,  9.9),
-        'Mancherial':             (5.5,  9.2),
-        'Nirmal':                 (2.6,  8.7),
-        'Nizamabad':              (1.3,  7.9),
-        'Jagtial':                (4.3,  8.4),
-        'Peddapalli':             (5.8,  8.3),
-        'JayashankarBhupalpally': (7.0,  8.0),
-        'RajannaSircilla':        (3.0,  7.6),
-        'Karimnagar':             (5.2,  7.6),
-        'Kamareddy':              (1.9,  7.0),
-        'Medak':                  (1.6,  6.1),
-        'Sangareddy':             (1.0,  5.3),
-        'Siddipet':               (3.5,  6.6),
-        'Jangaon':                (5.4,  6.2),
-        'WarangalUrban':          (6.3,  6.1),
-        'WarangalRural':          (6.9,  6.9),
-        'Mulugu':                 (7.9,  7.2),
-        'BhadradriKothagudem':    (8.5,  6.4),
-        'Khammam':                (7.8,  5.5),
-        'Mahabubabad':            (6.8,  5.4),
-        'Suryapet':               (6.4,  4.5),
-        'Nalgonda':               (5.0,  4.2),
-        'YadadriBhuvanagiri':     (5.8,  5.2),
-        'MedchalMalkajgiri':      (3.0,  4.9),
-        'Hyderabad':              (2.3,  4.5),
-        'Rangareddy':             (2.6,  3.7),
-        'Vikarabad':              (1.2,  4.0),
-        'Mahabubnagar':           (3.1,  3.0),
-        'Nagarkurnool':           (3.9,  2.5),
-        'Wanaparthy':             (4.2,  1.8),
-        'JogulumbaGadwal':        (3.6,  1.0),
-        'Narayanpet':             (2.1,  1.5),
-    }
-
-    G = nx.Graph()
-    G.add_nodes_from(districts)
-    for v, nbs in neighbors.items():
-        for nb in nbs:
-            if v < nb:
-                G.add_edge(v, nb)
-
-    node_colors = [HEX[solution[v]] for v in G.nodes()]
-
-    short = {
-        'KumurambheemAsifabad':   'Kumuram\nAsifabad',
-        'JayashankarBhupalpally': 'Jayashankar\nBhupalpally',
-        'RajannaSircilla':        'Rajanna\nSircilla',
-        'BhadradriKothagudem':    'Bhadradri\nKothagudem',
-        'YadadriBhuvanagiri':     'Yadadri\nBhuvanagiri',
-        'MedchalMalkajgiri':      'Medchal\nMalkajgiri',
-        'JogulumbaGadwal':        'Jogulamba\nGadwal',
-        'WarangalUrban':          'Warangal\nUrban',
-        'WarangalRural':          'Warangal\nRural',
-        'Mahabubnagar':           'Mahabub-\nnagar',
-    }
-    labels = {d: short.get(d, d) for d in districts}
-
-    fig, ax = plt.subplots(figsize=(17, 15))
-    fig.patch.set_facecolor('#ecf0f1')
-    ax.set_facecolor('#ecf0f1')
-
-    nx.draw_networkx(
-        G, pos=pos, ax=ax,
-        node_color=node_colors, node_size=900,
-        labels=labels,
-        font_size=5.5, font_weight='bold', font_color='white',
-        edge_color='#555', width=1.4
+def draw_map(gdf, solution):
+    gdf = gdf.copy()
+    gdf['color'] = gdf['dtname'].map(
+        lambda d: HEX.get(solution.get(d, 'MediumOrchid'), '#8e44ad')
     )
 
-    patches = [mpatches.Patch(color=HEX[c], label=c) for c in colors]
+    fig, ax = plt.subplots(figsize=(14, 15))
+    fig.patch.set_facecolor('#1a1a2e')
+    ax.set_facecolor('#1a1a2e')
+
+    gdf.plot(color=gdf['color'], edgecolor='white', linewidth=0.8, ax=ax)
+
+    for _, row in gdf.iterrows():
+        centroid = row.geometry.centroid
+        name     = row['dtname']
+        label    = SHORT.get(name, name)
+        nlines   = label.count('\n') + 1
+        fs       = 6.2 if nlines >= 3 else (7.2 if nlines == 2 else 8.2)
+        ax.text(
+            centroid.x, centroid.y, label,
+            ha='center', va='center',
+            fontsize=fs, fontweight='bold', color='white',
+            multialignment='center',
+            path_effects=[pe.withStroke(linewidth=2.2, foreground='black')]
+        )
+
+    used    = sorted(set(solution.values()))
+    patches = [mpatches.Patch(facecolor=HEX[c], edgecolor='white',
+                              linewidth=1.0, label=c) for c in used]
     ax.legend(handles=patches, loc='lower right', fontsize=11,
-              framealpha=0.95, edgecolor='#aaa',
-              title='Colors', title_fontsize=12)
+              framealpha=0.95, edgecolor='#aaa', facecolor='#f0f0f0',
+              title='CSP Colours', title_fontsize=11, labelcolor='#111')
     ax.set_title(
         "Telangana District Map Coloring (33 Districts) — CSP\n"
         "AIMA 4th Ed. (Russell & Norvig), Chapter 6",
-        fontsize=15, fontweight='bold', pad=20
+        fontsize=15, fontweight='bold', color='white', pad=18
     )
     ax.axis('off')
     plt.tight_layout()
-    plt.savefig('telangana_map_coloring.png', dpi=150, bbox_inches='tight')
+    plt.savefig('02_telangana_map_coloring.png', dpi=180,
+                bbox_inches='tight', facecolor=fig.get_facecolor())
     plt.close()
-    print("\nVisualization saved → telangana_map_coloring.png")
-    return solution
+    print("Saved → 02_telangana_map_coloring.png")
 
+
+# =============================================================================
+#  MAIN
+# =============================================================================
 
 if __name__ == "__main__":
-    solve_telangana()
+    print("Loading GeoJSON...")
+    gdf       = gpd.read_file('TELANGANA_DISTRICTS.geojson')
+    districts = list(gdf['dtname'])
+
+    print("Computing real adjacencies from geometry...")
+    adjacency = compute_adjacency(gdf)
+
+    print("Running CSP (Backtracking + MRV + Forward Checking)...")
+    solution  = solve(adjacency, districts)
+
+    print("\nSolution:")
+    for d, c in sorted(solution.items()):
+        print(f"  {d:<30s} -> {c}")
+
+    print("\nVerification:")
+    ok = True
+    for d, nbs in adjacency.items():
+        for nb in nbs:
+            if solution[d] == solution[nb]:
+                print(f"  CONFLICT: {d} and {nb} both = {solution[d]}")
+                ok = False
+    if ok:
+        print("  All constraints satisfied!")
+
+    draw_map(gdf, solution)
