@@ -1,4 +1,4 @@
-# CSP Assignment — Constraint Satisfaction Problems
+# AI_Assignment_4/CSP Assignment — Constraint Satisfaction Problems
 
 **Reference:** Artificial Intelligence: A Modern Approach (4th Edition)  
 Stuart Russell & Peter Norvig, Pearson — Chapter 6
@@ -15,6 +15,7 @@ CSP-Assignment/
 │
 ├── 02_telangana_map_coloring.py      # Problem 2 — Telangana district coloring
 ├── 02_telangana_map_coloring.png     # Output visualization
+├── TELANGANA_DISTRICTS.geojson       # Real district boundary data
 │
 ├── 03_sudoku_csp.py                  # Problem 3 — Sudoku solver
 ├── 03_sudoku.png                     # Output visualization
@@ -27,11 +28,21 @@ CSP-Assignment/
 
 ---
 
-## Requirements & How to Run
+## Requirements
 
 ```
-pip install matplotlib networkx
+pip install matplotlib networkx geopandas
 ```
+
+| Library | Used For |
+|---------|----------|
+| `matplotlib` | All visualizations |
+| `networkx` | Constraint graph drawing (Problem 1) |
+| `geopandas` | Real geographic map rendering (Problem 2) |
+
+---
+
+## How to Run
 
 ```
 python 01_australia_map_coloring.py
@@ -41,6 +52,8 @@ python 04_cryptarithmetic_csp.py
 ```
 
 Each script prints the solution to the terminal and saves a `.png` visualization in the same folder.
+
+> **Note for Problem 2:** Place `TELANGANA_DISTRICTS.geojson` in the same folder as the script before running.
 
 ---
 
@@ -141,6 +154,8 @@ T   — (none — island, no land borders)
 WA=Red   NT=Green   Q=Red   SA=Blue   NSW=Green   V=Red   T=Red
 ```
 
+![Output](01_australia_map_coloring.png)
+
 ---
 
 ## Problem 2 — Telangana Map Coloring (33 Districts)
@@ -166,6 +181,19 @@ The **Four Colour Theorem** guarantees any planar map needs at most 4 colours. 6
 
 ### Districts Covered (all 33)
 Adilabad, KumurambheemAsifabad, Mancherial, Nirmal, Nizamabad, Jagtial, Peddapalli, JayashankarBhupalpally, RajannaSircilla, Karimnagar, Kamareddy, Medak, Sangareddy, Siddipet, Jangaon, WarangalUrban, WarangalRural, Mulugu, BhadradriKothagudem, Khammam, Mahabubabad, Suryapet, Nalgonda, YadadriBhuvanagiri, MedchalMalkajgiri, Hyderabad, Rangareddy, Vikarabad, Mahabubnagar, Nagarkurnool, Wanaparthy, JogulumbaGadwal, Narayanpet.
+
+**Key implementation detail:**
+District adjacency is **computed directly from geographic geometry** using the GeoJSON boundary data — not typed manually. Two distr>
+
+```python
+shared = geom1.intersection(geom2)
+if shared.geom_type not in ('Point', 'MultiPoint') and not shared.is_empty:
+    adjacency[d1].append(d2)
+```
+
+The output uses real-world district boundaries from the GeoJSON file, rendered using `geopandas`.
+
+![Output](02_telangana_map_coloring.png)
 
 ---
 
