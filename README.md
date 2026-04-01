@@ -1,4 +1,4 @@
-# AI_Assignment_4/CSP Assignment — Constraint Satisfaction Problems
+# AI_Assignment_4 — Constraint Satisfaction Problems(CSP)
 
 **Reference:** Artificial Intelligence: A Modern Approach (4th Edition)  
 Stuart Russell & Peter Norvig, Pearson — Chapter 6
@@ -67,7 +67,7 @@ A **Constraint Satisfaction Problem (CSP)** is defined by three things:
 | **Domains** D = {D₁, D₂, ..., Dₙ} | The set of possible values for each variable |
 | **Constraints** C | Rules that restrict which value combinations are allowed |
 
-The **goal** is to find an assignment of values to all variables such that every constraint is satisfied.
+A solution is a complete, consistent assignment — every variable has a value and no constraint is violated.
 
 ---
 
@@ -154,7 +154,7 @@ T   — (none — island, no land borders)
 WA=Red   NT=Green   Q=Red   SA=Blue   NSW=Green   V=Red   T=Red
 ```
 
-![Output](01_australia_map_coloring.png)
+![Output](outputs/01_australia_map_coloring.png)
 
 ---
 
@@ -193,7 +193,7 @@ if shared.geom_type not in ('Point', 'MultiPoint') and not shared.is_empty:
 
 The output uses real-world district boundaries from the GeoJSON file, rendered using `geopandas`.
 
-![Output](02_telangana_map_coloring.png)
+![Output](outputs/02_telangana_map_coloring.png)
 
 ---
 
